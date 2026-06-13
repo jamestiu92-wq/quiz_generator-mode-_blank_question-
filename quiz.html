@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Dashboard - Play Arena</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --success: #10b981;
+            --danger: #ef4444;
+            --bg: #f3f4f6;
+            --surface: #ffffff;
+            --text: #1f2937;
+            --border: #e5e7eb;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .quiz-card {
+            width: 100%;
+            max-width: 650px;
+            background: var(--surface);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .back-link {
+            display: inline-block;
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+            margin-bottom: 20px;
+            float: left;
+        }
+        .clear { clear: both; }
+        
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        .chances-span { font-weight: bold; color: var(--danger); }
+        
+        .question-box {
+            background-color: #f9fafb;
+            border: 2px dashed var(--primary);
+            padding: 25px;
+            border-radius: 10px;
+            font-size: 20px;
+            line-height: 1.6;
+            margin-bottom: 25px;
+        }
+        .blank-space {
+            color: var(--primary);
+            font-weight: bold;
+            border-bottom: 3px solid var(--primary);
+            padding: 0 15px;
+            display: inline-block;
+            min-width: 80px;
+        }
+        
+        /* 10 item choice array layout configuration */
+        .choices-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+        .choice-btn {
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .choice-btn:hover:not(:disabled) {
+            background-color: #f3f4f6;
+            border-color: #9ca3af;
+        }
+        .choice-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+        .choice-btn.correct { background-color: #d1fae5 !important; border-color: var(--success) !important; color: #065f46; }
+        .choice-btn.wrong { background-color: #fee2e2 !important; border-color: var(--danger) !important; color: #991b1b; }
+
+        /* Action triggers layout styling */
+        .action-row {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        .giveup-btn { background-color: #374151; color: white; padding: 12px 24px; font-weight: bold; border-radius: 8px; border:none; cursor:pointer;}
+        .giveup-btn:hover { background-color: #1f2937; }
+        .next-btn { background-color: var(--primary); color: white; padding: 12px 30px; font-weight: bold; border-radius: 8px; border:none; cursor:pointer; display: none;}
+        .next-btn:hover { background-color: var(--primary-hover); }
+
+        .feedback-msg {
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 15px;
+            min-height: 27px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="quiz-card">
+        <a href="index.html" class="back-link">← Back (Add More Questions)</a>
+        <div class="clear"></div>
+
+        <div class="status-header">
+            <div id="scoreDisplay">Questions Solved: 0</div>
+            <div>Chances Remaining: <span id="chancesCount" class="chances-span">3</span></div>
+        </div>
+
+        <div class="question-box" id="questionBox">
+            Loading interactive card context...
+        </div>
+
+        <div class="choices-grid" id="choicesGrid">
+            </div>
+
+        <div class="feedback-msg" id="feedbackMessage"></div>
+
+        <div class="action-row">
+            <button class="giveup-btn" id="giveUpBtn" onclick="revealAnswer(false)">Give Up</button>
+            <button class="next-btn" id="nextBtn" onclick="setupNewQuestion()">Next Question →</button>
+        </div>
+    </div>
+
+    <script>
+        // Data Extraction State Vectors
+        let masterPool = JSON.parse(localStorage.getItem('quizDataBank')) || [];
+        let score = 0;
+        
+        // Active item working pointers
+        let currentRawSentence = "";
+        let targetAnswerWord = "";
+        let hiddenQuestionString = "";
+        let remainingChances = 3;
+        let isRoundOver = false;
+
+        // Static fallback dictionary used to fill out choices to exactly 10 options
+        const fillerVocabulary = [
+            "Ohm", "Photosynthesis", "Manila", "Gravity", "Atmosphere", 
+            "Software", "Database", "Network", "Resistor", "Proton", 
+            "Oxygen", "Velocity", "Algorithm", "Hardware", "Electron",
+            "Molecules", "Voltage", "Chlorophyll", "Ecosystem", "Continent"
+        ];
+
+        function initQuiz() {
+            if (masterPool.length === 0) {
+                document.getElementById('questionBox').innerHTML = "No configuration data identified! Please step backward and populate standard text entries first.";
+                document.getElementById('giveUpBtn').style.display = 'none';
+                return;
+            }
+            setupNewQuestion();
+        }
+
+        function setupNewQuestion() {
+            remainingChances = 3;
+            isRoundOver = false;
+            
+            document.getElementById('chancesCount').innerText = remainingChances;
+            document.getElementById('feedbackMessage').innerText = "";
+            document.getElementById('feedbackMessage').style.color = "initial";
+            document.getElementById('nextBtn').style.display = "none";
+            document.getElementById('giveUpBtn').style.display = "inline-block";
+
+            // 1. Pick a random sentence from the pool
+            const randomIndex = Math.floor(Math.random() * masterPool.length);
+            currentRawSentence = masterPool[randomIndex];
+
+            // 2. Extract a key word to act as the blank target
+            const words = currentRawSentence.split(/\s+/);
+            
+            // Look for a long word or default to a middle index word
+            let targetIndex = Math.floor(words.length / 2);
+            for (let i = 0; i < words.length; i++) {
+                // Strip punctuation to verify structural word lengths accurately
+                let cleanWord = words[i].replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
+                if (cleanWord.length > 5) {
+                    targetIndex = i;
+                    break;
+                }
+            }
+
+            // Isolate cleanly formatted string answers versus mapped placeholders
+            targetAnswerWord = words[targetIndex].replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
+            
+            // Handle case matching punctuation adjustments
+            let structuralPunctuation = words[targetIndex].replace(/[A-Za-z0-9]/g, "");
+            words[targetIndex] = `<span class="blank-space">_______</span>${structuralPunctuation}`;
+            hiddenQuestionString = words.join(" ");
+
+            // Inject prompt to page box viewports
+            document.getElementById('questionBox').innerHTML = hiddenQuestionString;
+
+            // 3. Build a pool of 10 choices
+            buildChoiceButtons();
+        }
+
+        function buildChoiceButtons() {
+            let options = new Set();
+            options.add(targetAnswerWord); // Add correct target first
+
+            // Gather alternative words directly out of the user's other notes
+            masterPool.forEach(sentence => {
+                sentence.split(/\s+/).forEach(w => {
+                    let clean = w.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
+                    if (clean.length > 2 && clean.toLowerCase() !== targetAnswerWord.toLowerCase()) {
+                        options.add(clean);
+                    }
+                });
+            });
+
+            // If we don't have enough words from the notes, inject filler data until we hit 10
+            let fillerIndex = 0;
+            while (options.size < 10 && fillerIndex < fillerVocabulary.length) {
+                if (fillerVocabulary[fillerIndex].toLowerCase() !== targetAnswerWord.toLowerCase()) {
+                    options.add(fillerVocabulary[fillerIndex]);
+                }
+                fillerIndex++;
+            }
+
+            // Convert to array and slice to ensure exactly 10 entries
+            let choiceList = Array.from(options).slice(0, 10);
+
+            // Scramble array presentation structures using standard sorting randomizers
+            choiceList.sort(() => Math.random() - 0.5);
+
+            // Mount values to the DOM grid matrix items
+            const grid = document.getElementById('choicesGrid');
+            grid.innerHTML = '';
+
+            choiceList.forEach(choice => {
+                const btn = document.createElement('button');
+                btn.className = 'choice-btn';
+                btn.innerText = choice;
+                btn.onclick = () => checkGuess(btn, choice);
+                grid.appendChild(btn);
+            });
+        }
+
+        function checkGuess(clickedButton, selectedValue) {
+            if (isRoundOver) return;
+
+            if (selectedValue.toLowerCase() === targetAnswerWord.toLowerCase()) {
+                clickedButton.classList.add('correct');
+                score++;
+                document.getElementById('scoreDisplay').innerText = `Questions Solved: ${score}`;
+                revealAnswer(true);
+            } else {
+                clickedButton.classList.add('wrong');
+                clickedButton.disabled = true; // Block double clicks against wrong buttons
+                remainingChances--;
+                document.getElementById('chancesCount').innerText = remainingChances;
+
+                if (remainingChances <= 0) {
+                    revealAnswer(false);
+                } else {
+                    const msg = document.getElementById('feedbackMessage');
+                    msg.innerText = "Incorrect Guess! Try Again.";
+                    msg.style.color = "var(--danger)";
+                }
+            }
+        }
+
+        function revealAnswer(isCorrectAnswered) {
+            isRoundOver = true;
+            const msg = document.getElementById('feedbackMessage');
+            
+            // Loop over all available options to highlight the correct answer in green
+            const buttons = document.getElementsByClassName('choice-btn');
+            for (let btn of buttons) {
+                if (btn.innerText.toLowerCase() === targetAnswerWord.toLowerCase()) {
+                    btn.classList.add('correct');
+                }
+                btn.disabled = true; // Lock all components
+            }
+
+            // Substitute the gap placeholder with the true extracted value
+            const finalRevealedSentence = currentRawSentence.replace(
+                targetAnswerWord, 
+                `<span class="blank-space" style="color: var(--success); border-color: var(--success);">${targetAnswerWord}</span>`
+            );
+            document.getElementById('questionBox').innerHTML = finalRevealedSentence;
+
+            if (isCorrectAnswered) {
+                msg.innerText = "Excellent! You guessed it correctly.";
+                msg.style.color = "var(--success)";
+            } else {
+                msg.innerText = `Out of turns! The correct answer was: "${targetAnswerWord}"`;
+                msg.style.color = "var(--danger)";
+            }
+
+            // Adjust navigation control buttons visibility states
+            document.getElementById('giveUpBtn').style.display = "none";
+            document.getElementById('nextBtn').style.display = "inline-block";
+        }
+
+        // Boot system components
+        initQuiz();
+    </script>
+</body>
+</html>

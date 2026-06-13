@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcard Setup - Input Panel</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --success: #10b981;
+            --danger: #ef4444;
+            --bg: #f3f4f6;
+            --surface: #ffffff;
+            --text: #1f2937;
+            --border: #d1d5db;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .panel {
+            width: 100%;
+            max-width: 500px;
+            background: var(--surface);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        h2 { margin-top: 0; color: var(--primary); text-align: center; }
+        
+        /* Small input rectangle container */
+        .input-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            font-size: 15px;
+            outline: none;
+        }
+        input[type="text"]:focus { border-color: var(--primary); }
+        
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .add-btn { background-color: var(--primary); color: white; }
+        .add-btn:hover { background-color: var(--primary-hover); }
+        
+        .generate-btn {
+            background-color: var(--success);
+            color: white;
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            margin-top: 15px;
+        }
+        .generate-btn:hover { background-color: #059669; }
+        .generate-btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
+
+        /* Review list styling */
+        .list-container {
+            margin-top: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 5px;
+        }
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            background: #f9fafb;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+        .info-item:last-child { border-bottom: none; }
+        .delete-btn { background: none; color: var(--danger); padding: 2px 6px; }
+        .delete-btn:hover { background: #fee2e2; }
+        .counter { font-size: 13px; color: #6b7280; text-align: right; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="panel">
+        <h2>Quiz Data Manager</h2>
+        <p style="font-size: 13px; color: #6b7280; text-align: center; margin-bottom: 20px;">
+            Enter full facts/sentences. The quiz engine will extract words to make fill-in-the-blank questions.
+        </p>
+
+        <div class="input-box">
+            <input type="text" id="infoInput" placeholder="Type a sentence or fact here...">
+            <button class="add-btn" onclick="addInformation()">ADD</button>
+        </div>
+
+        <div id="itemCounter" class="counter">Items Added: 0</div>
+        <div class="list-container" id="listContainer">
+            </div>
+
+        <button class="generate-btn" id="generateBtn" onclick="goToQuiz()" disabled>GENERATE QUIZ</button>
+    </div>
+
+    <script>
+        // Load existing pool from localStorage if present
+        let infoPool = JSON.parse(localStorage.getItem('quizDataBank')) || [];
+
+        function updateUI() {
+            const container = document.getElementById('listContainer');
+            const counter = document.getElementById('itemCounter');
+            const generateBtn = document.getElementById('generateBtn');
+            
+            container.innerHTML = '';
+            infoPool.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'info-item';
+                div.innerHTML = `
+                    <span>${item}</span>
+                    <button class="delete-btn" onclick="removeItem(${index})">✕</button>
+                `;
+                container.appendChild(div);
+            });
+
+            counter.innerText = `Items Added: ${infoPool.length}`;
+            // We require at least 1 item to trigger the generator
+            generateBtn.disabled = infoPool.length === 0;
+            
+            // Sync current pool status back to browser local storage
+            localStorage.setItem('quizDataBank', JSON.stringify(infoPool));
+        }
+
+        function addInformation() {
+            const input = document.getElementById('infoInput');
+            const text = input.value.trim();
+            
+            if (!text) return;
+            if (text.split(' ').length < 2) {
+                alert("Please write a full complete sentence to create an extraction blank.");
+                return;
+            }
+
+            infoPool.push(text);
+            input.value = ''; // Reset input box
+            updateUI();
+            input.focus();
+        }
+
+        function removeItem(index) {
+            infoPool.splice(index, 1);
+            updateUI();
+        }
+
+        function goToQuiz() {
+            // Re-save pool and move over to the interactive quiz panel layout
+            localStorage.setItem('quizDataBank', JSON.stringify(infoPool));
+            window.location.href = 'quiz.html';
+        }
+
+        // Initialize on page boot
+        updateUI();
+
+        // Listen for standard text keyboard enter confirmations
+        document.getElementById('infoInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') addInformation();
+        });
+    </script>
+</body>
+</html>
