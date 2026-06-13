@@ -225,32 +225,46 @@
         }
 
         function buildChoiceButtons() {
-            let options = new Set();
-            options.add(targetAnswerWord); // Add correct target first
+            // Find all words inside the current question sentence so we can avoid using them as wrong options
+            let currentSentenceWords = new Set(
+                currentRawSentence.toLowerCase().split(/\s+/).map(w => w.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, ""))
+            );
 
-            // Gather alternative words directly out of the user's other notes
+            let wrongOptionsPool = new Set();
+
+            // 1. Collect potential wrong words from other sentences in the user's data bank
             masterPool.forEach(sentence => {
                 sentence.split(/\s+/).forEach(w => {
                     let clean = w.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
-                    if (clean.length > 2 && clean.toLowerCase() !== targetAnswerWord.toLowerCase()) {
-                        options.add(clean);
+                    // Ensure word is valid, isn't part of the current question sentence, and isn't the target answer
+                    if (clean.length > 2 && !currentSentenceWords.has(clean.toLowerCase()) && clean.toLowerCase() !== targetAnswerWord.toLowerCase()) {
+                        wrongOptionsPool.add(clean);
                     }
                 });
             });
 
-            // If we don't have enough words from the notes, inject filler data until we hit 10
-            let fillerIndex = 0;
-            while (options.size < 10 && fillerIndex < fillerVocabulary.length) {
-                if (fillerVocabulary[fillerIndex].toLowerCase() !== targetAnswerWord.toLowerCase()) {
-                    options.add(fillerVocabulary[fillerIndex]);
+            // 2. Mix in the global background filler choices to make sure we have plenty of unique options
+            fillerVocabulary.forEach(word => {
+                if (!currentSentenceWords.has(word.toLowerCase()) && word.toLowerCase() !== targetAnswerWord.toLowerCase()) {
+                    wrongOptionsPool.add(word);
                 }
-                fillerIndex++;
+            });
+
+            // 3. Convert the set of wrong answers into an array and fully scramble it
+            let shuffledWrongChoices = Array.from(wrongOptionsPool);
+            shuffledWrongChoices.sort(() => Math.random() - 0.5);
+
+            // 4. Take the first 9 unique incorrect items from our randomized pool
+            let finalChoicesSet = new Set();
+            finalChoicesSet.add(targetAnswerWord); // Always seed the correct answer first
+            
+            for (let i = 0; i < shuffledWrongChoices.length; i++) {
+                if (finalChoicesSet.size >= 10) break;
+                finalChoicesSet.add(shuffledWrongChoices[i]);
             }
 
-            // Convert to array and slice to ensure exactly 10 entries
-            let choiceList = Array.from(options).slice(0, 10);
-
-            // Scramble array presentation structures using standard sorting randomizers
+            // 5. Final array shuffle so the correct answer isn't always sitting in button slot 1
+            let choiceList = Array.from(finalChoicesSet);
             choiceList.sort(() => Math.random() - 0.5);
 
             // Mount values to the DOM grid matrix items
